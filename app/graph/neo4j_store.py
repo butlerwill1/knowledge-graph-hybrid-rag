@@ -83,20 +83,29 @@ class Neo4jGraphStore:
             ).consume()
 
     def upsert_edges(self, edges: list[GraphEdge]) -> None:
-        rows = [edge.model_dump(mode="json") for edge in edges]
-        if not rows:
+        if not edges:
             return
+        # Cypher relationship types can't be parameterised, so group by relation type
+        # and issue one UNWIND statement per type.
+        by_type: dict[str, list[dict]] = {}
+        for edge in edges:
+            row = edge.model_dump(mode="json")
+            by_type.setdefault(edge.relation, []).append(row)
+
         with self._driver.session() as session:
-            session.run(
-                """
-                UNWIND $rows AS row
-                MATCH (source {id: row.source_id})
-                MATCH (target {id: row.target_id})
-                MERGE (source)-[rel:RELATED {id: row.id}]->(target)
-                SET rel += row
-                """,
-                rows=rows,
-            ).consume()
+            for rel_type, rows in by_type.items():
+                import re as _re
+                safe_type = _re.sub(r"[^A-Z0-9_]", "_", rel_type.upper().replace(" ", "_").replace("-", "_"))
+                session.run(
+                    f"""
+                    UNWIND $rows AS row
+                    MATCH (source {{id: row.source_id}})
+                    MATCH (target {{id: row.target_id}})
+                    MERGE (source)-[rel:`{safe_type}` {{id: row.id}}]->(target)
+                    SET rel += row
+                    """,
+                    rows=rows,
+                ).consume()
 
     def get_chunks(self, chunk_ids: list[str]) -> list[ChunkRecord]:
         if not chunk_ids:
@@ -136,7 +145,7 @@ class Neo4jGraphStore:
             result = session.run(
                 """
                 UNWIND $entity_ids AS entity_id
-                MATCH (c:Claim)-[rel:RELATED {relation: 'ABOUT'}]->(e:Entity {id: entity_id})
+                MATCH (c:Claim)-[rel:ABOUT]->(e:Entity {id: entity_id})
                 RETURN DISTINCT c
                 ORDER BY c.confidence DESC, c.id ASC
                 LIMIT $limit
