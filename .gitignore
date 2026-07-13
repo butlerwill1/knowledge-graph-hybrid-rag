@@ -5,6 +5,7 @@ __pycache__/
 venv/
 .env
 *.pdf
+*.jsonl
 vector_store/
 *.egg-info/
 dist/

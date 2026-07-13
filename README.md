@@ -44,6 +44,7 @@ python -m uvicorn app.main:app --reload
 ## Notes
 
 - `GRAPH_BACKEND=neo4j` uses the persistent Cypher-backed graph store.
-- `ENABLE_LLM_EXTRACTION=true` enables structured extraction through `client.responses.parse(...)`.
-- The OpenAI SDK is configured against OpenRouter by `LLM_BASE_URL=https://openrouter.ai/api/v1`. OpenRouter documents this as OpenAI-SDK-compatible, and its Responses API is currently documented as beta.
+- `ENABLE_LLM_EXTRACTION=true` enables structured extraction through OpenRouter-compatible chat completions.
+- The OpenAI SDK is configured against OpenRouter by `LLM_BASE_URL=https://openrouter.ai/api/v1`. The extractor sends a strict JSON schema via `response_format` and validates the returned JSON with Pydantic before writing graph records.
+- LLM extraction appends per-chunk usage records to `LLM_USAGE_LOG_PATH`. Token counts and actual OpenRouter cost are captured from the provider response when present; local estimated costs are only populated when `LLM_INPUT_COST_PER_MILLION` and `LLM_OUTPUT_COST_PER_MILLION` are configured.
 - The retrieval path is hybrid by design: vector retrieval for chunks, graph expansion for related claims, and source citations on the final answer.

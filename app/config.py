@@ -33,6 +33,10 @@ class Settings(BaseSettings):
     openrouter_title: str | None = Field(default=None, alias="OPENROUTER_TITLE")
     enable_llm_extraction: bool = Field(default=False, alias="ENABLE_LLM_EXTRACTION")
     llm_extraction_max_chunks: int = Field(default=25, alias="LLM_EXTRACTION_MAX_CHUNKS")
+    llm_usage_log_path: Path = Field(default=Path("data/llm_usage.jsonl"), alias="LLM_USAGE_LOG_PATH")
+    llm_input_cost_per_million: float | None = Field(default=None, alias="LLM_INPUT_COST_PER_MILLION")
+    llm_output_cost_per_million: float | None = Field(default=None, alias="LLM_OUTPUT_COST_PER_MILLION")
+    llm_cost_currency: str = Field(default="USD", alias="LLM_COST_CURRENCY")
 
     model_config = SettingsConfigDict(
         env_file=".env",
@@ -45,6 +49,7 @@ class Settings(BaseSettings):
         for path in (self.raw_data_dir, self.parsed_data_dir, self.extracted_data_dir):
             path.mkdir(parents=True, exist_ok=True)
         self.vector_store_path.parent.mkdir(parents=True, exist_ok=True)
+        self.llm_usage_log_path.parent.mkdir(parents=True, exist_ok=True)
 
     @property
     def llm_extraction_ready(self) -> bool:
