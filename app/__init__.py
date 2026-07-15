@@ -1,2 +1,1 @@
-"""Knowledge graph MVP package."""
-
+"""Knowledge-graph hybrid retrieval application package."""

@@ -1,3 +1,5 @@
+"""Load environment-backed settings and prepare local data directories."""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -7,6 +9,8 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
+    """Application settings loaded from environment variables or a local `.env` file."""
+
     app_name: str = Field(default="Knowledge Graph MVP", alias="APP_NAME")
     environment: str = Field(default="development", alias="ENVIRONMENT")
     raw_data_dir: Path = Field(default=Path("data/raw_pdfs"), alias="RAW_DATA_DIR")
@@ -19,6 +23,7 @@ class Settings(BaseSettings):
     neo4j_password: str = Field(default="knowledgegraph", alias="NEO4J_PASSWORD")
     llm_api_key: str | None = Field(
         default=None,
+        # Accept provider-specific names without coupling the extractor to one vendor.
         validation_alias=AliasChoices("LLM_API_KEY", "OPENROUTER_API_KEY", "OPENAI_API_KEY"),
     )
     llm_base_url: str = Field(
@@ -33,6 +38,7 @@ class Settings(BaseSettings):
     openrouter_title: str | None = Field(default=None, alias="OPENROUTER_TITLE")
     enable_llm_extraction: bool = Field(default=False, alias="ENABLE_LLM_EXTRACTION")
     llm_extraction_max_chunks: int = Field(default=25, alias="LLM_EXTRACTION_MAX_CHUNKS")
+    llm_adjacent_context_chars: int = Field(default=2000, ge=0, alias="LLM_ADJACENT_CONTEXT_CHARS")
     llm_usage_log_path: Path = Field(default=Path("data/llm_usage.jsonl"), alias="LLM_USAGE_LOG_PATH")
     llm_input_cost_per_million: float | None = Field(default=None, alias="LLM_INPUT_COST_PER_MILLION")
     llm_output_cost_per_million: float | None = Field(default=None, alias="LLM_OUTPUT_COST_PER_MILLION")
@@ -46,6 +52,8 @@ class Settings(BaseSettings):
     )
 
     def ensure_directories(self) -> None:
+        """Create parent directories required by local ingestion artefacts."""
+
         for path in (self.raw_data_dir, self.parsed_data_dir, self.extracted_data_dir):
             path.mkdir(parents=True, exist_ok=True)
         self.vector_store_path.parent.mkdir(parents=True, exist_ok=True)
@@ -53,8 +61,11 @@ class Settings(BaseSettings):
 
     @property
     def llm_extraction_ready(self) -> bool:
+        """Return whether configuration is sufficient to make paid LLM calls."""
+
         return self.enable_llm_extraction and bool(self.llm_api_key)
 
 
+# A single settings object is shared by the application composition layer.
 settings = Settings()
 settings.ensure_directories()

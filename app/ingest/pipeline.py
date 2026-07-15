@@ -1,3 +1,5 @@
+"""Orchestrate parsing, extraction, persistence, and local audit output."""
+
 from __future__ import annotations
 
 import json
@@ -14,6 +16,8 @@ from app.retrieve.vector_store import FileVectorStore
 
 
 class IngestionPipeline:
+    """Coordinate all transformations and persistence for one source file."""
+
     def __init__(
         self,
         settings: Settings,
@@ -24,6 +28,8 @@ class IngestionPipeline:
         deterministic_extractor: DeterministicExtractor | None = None,
         llm_extractor: LLMExtractor | None = None,
     ) -> None:
+        """Construct the pipeline with injectable components for testing."""
+
         self.settings = settings
         self.graph_store = graph_store
         self.vector_store = vector_store
@@ -33,8 +39,12 @@ class IngestionPipeline:
         self.llm_extractor = llm_extractor or LLMExtractor(settings)
 
     def ingest_file(self, file_path: Path) -> IngestionResult:
+        """Parse, extract, persist, and summarise one local source file."""
+
         parsed = self.parser.parse(file_path)
         chunks = self.chunker.chunk(parsed)
+        # Keep extractor outputs distinguishable through their `extractor`
+        # property while writing them through the same graph-store interface.
         deterministic_entities, deterministic_claims, deterministic_edges = self.deterministic_extractor.extract(chunks)
         llm_entities, llm_claims, llm_edges = self.llm_extractor.extract(chunks)
 
@@ -42,6 +52,8 @@ class IngestionPipeline:
         claims = deterministic_claims + llm_claims
         edges = deterministic_edges + llm_edges
 
+        # Graph and vector persistence serve different retrieval paths. These
+        # writes are sequential and are not one cross-store transaction.
         self.graph_store.upsert_document(parsed.document)
         self.graph_store.upsert_chunks(chunks)
         self.graph_store.upsert_entities(entities)
@@ -49,6 +61,8 @@ class IngestionPipeline:
         self.graph_store.upsert_edges(edges)
         self.vector_store.add_chunks(chunks)
 
+        # Audit JSON makes the parser and extractor outputs inspectable without
+        # querying Neo4j, but editing it later does not mutate the database.
         parsed_output = self.settings.parsed_data_dir / f"{parsed.document.id}.json"
         extracted_output = self.settings.extracted_data_dir / f"{parsed.document.id}.json"
         parsed_output.write_text(parsed.model_dump_json(indent=2), encoding="utf-8")

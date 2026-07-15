@@ -1,3 +1,5 @@
+"""Compose and expose the FastAPI application and its shared services."""
+
 from __future__ import annotations
 
 from fastapi import FastAPI
@@ -13,6 +15,8 @@ from app.retrieve.vector_store import FileVectorStore
 
 
 def build_graph_store():
+    """Construct the graph backend selected by `GRAPH_BACKEND`."""
+
     if settings.graph_backend == "in_memory":
         return InMemoryGraphStore()
     if settings.graph_backend == "neo4j":
@@ -21,6 +25,8 @@ def build_graph_store():
 
 
 def create_app() -> FastAPI:
+    """Build the FastAPI app and attach long-lived services to application state."""
+
     app = FastAPI(title=settings.app_name)
     graph_store = build_graph_store()
     vector_store = FileVectorStore(settings.vector_store_path)
@@ -28,6 +34,8 @@ def create_app() -> FastAPI:
     retrieval_engine = RetrievalEngine(graph_store=graph_store, vector_store=vector_store)
     answer_service = GroundedAnswerService()
 
+    # Routes retrieve these shared services from app.state instead of creating
+    # new database clients or stores for every request.
     app.state.settings = settings
     app.state.graph_store = graph_store
     app.state.vector_store = vector_store
@@ -38,9 +46,12 @@ def create_app() -> FastAPI:
 
     @app.on_event("shutdown")
     def close_graph_store() -> None:
+        """Release graph-driver resources during application shutdown."""
+
         graph_store.close()
 
     return app
 
 
+# Uvicorn imports this module-level ASGI application.
 app = create_app()

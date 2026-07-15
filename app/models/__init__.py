@@ -1,3 +1,5 @@
+"""Shared application-model exports."""
+
 from app.models.schemas import (
     ChunkRecord,
     ClaimRecord,
@@ -23,4 +25,3 @@ __all__ = [
     "QueryRequest",
     "QueryResponse",
 ]
-

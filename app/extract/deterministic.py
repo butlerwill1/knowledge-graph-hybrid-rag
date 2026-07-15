@@ -1,3 +1,5 @@
+"""Extract graph entities, claims, and relations with deterministic spaCy rules."""
+
 from __future__ import annotations
 
 from functools import lru_cache
@@ -50,6 +52,8 @@ _CLAIM_VERBS = frozenset({"is", "are", "was", "were", "has", "have", "can", "sho
 
 @lru_cache(maxsize=1)
 def _load_nlp() -> "spacy_type.Language":
+    """Load and cache the shared spaCy pipeline on first use."""
+
     import spacy
     # en_core_web_sm: ~12 MB vs en_core_web_lg: ~560 MB
     # Word vectors aren't used for NER so the large model wastes RAM
@@ -57,13 +61,18 @@ def _load_nlp() -> "spacy_type.Language":
 
 
 class DeterministicExtractor:
+    """Create reproducible graph records with spaCy and fixed heuristics."""
+
     def extract(self, chunks: list[ChunkRecord]) -> tuple[list[EntityRecord], list[ClaimRecord], list[GraphEdge]]:
+        """Extract and combine graph records from a sequence of chunks."""
+
         nlp = _load_nlp()
 
         all_entities: list[EntityRecord] = []
         all_claims: list[ClaimRecord] = []
         all_edges: list[GraphEdge] = []
 
+        # nlp.pipe amortises model overhead across chunks while preserving order.
         texts = [c.text for c in chunks]
         for chunk, doc in zip(chunks, nlp.pipe(texts, batch_size=16)):
             entities, claims, edges = self._process_chunk(chunk, doc)
@@ -74,6 +83,8 @@ class DeterministicExtractor:
         return all_entities, all_claims, all_edges
 
     def _process_chunk(self, chunk: ChunkRecord, doc: object) -> tuple[list[EntityRecord], list[ClaimRecord], list[GraphEdge]]:
+        """Translate one parsed spaCy document into provenance-bearing records."""
+
         entities: list[EntityRecord] = []
         claims: list[ClaimRecord] = []
         edges: list[GraphEdge] = []
@@ -92,6 +103,7 @@ class DeterministicExtractor:
 
             record = EntityRecord(
                 canonical_name=ent.text.strip(),
+                mention_text=ent.text.strip(),
                 label=label,
                 document_id=chunk.document_id,
                 chunk_id=chunk.id,
@@ -119,6 +131,7 @@ class DeterministicExtractor:
             if len(text) < _MIN_CLAIM_LEN:
                 continue
             lowered = text.lower()
+            # Word padding prevents assertion verbs from matching inside longer words.
             if not any(f" {v} " in f" {lowered} " for v in _CLAIM_VERBS):
                 continue
 

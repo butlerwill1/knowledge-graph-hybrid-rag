@@ -1,3 +1,5 @@
+"""Provide an ephemeral dictionary-backed graph store for tests and development."""
+
 from __future__ import annotations
 
 from collections import defaultdict
@@ -6,7 +8,11 @@ from app.models.schemas import ChunkRecord, ClaimRecord, DocumentRecord, EntityR
 
 
 class InMemoryGraphStore:
+    """Store graph records and a minimal claim index in process memory."""
+
     def __init__(self) -> None:
+        """Initialise empty record dictionaries and entity-to-claim index."""
+
         self.documents: dict[str, DocumentRecord] = {}
         self.chunks: dict[str, ChunkRecord] = {}
         self.entities: dict[str, EntityRecord] = {}
@@ -15,33 +21,51 @@ class InMemoryGraphStore:
         self.entity_claim_index: dict[str, list[str]] = defaultdict(list)
 
     def ensure_schema(self) -> None:
+        """Perform no work because dictionary storage has no schema."""
+
         return
 
     def upsert_document(self, document: DocumentRecord) -> None:
+        """Insert or replace a document by ID."""
+
         self.documents[document.id] = document
 
     def upsert_chunks(self, chunks: list[ChunkRecord]) -> None:
+        """Insert or replace chunks by ID."""
+
         for chunk in chunks:
             self.chunks[chunk.id] = chunk
 
     def upsert_entities(self, entities: list[EntityRecord]) -> None:
+        """Insert or replace entities by ID."""
+
         for entity in entities:
             self.entities[entity.id] = entity
 
     def upsert_claims(self, claims: list[ClaimRecord]) -> None:
+        """Insert or replace claims by ID."""
+
         for claim in claims:
             self.claims[claim.id] = claim
 
     def upsert_edges(self, edges: list[GraphEdge]) -> None:
+        """Insert edges and index claim-to-entity ABOUT relationships."""
+
         for edge in edges:
             self.edges[edge.id] = edge
+            # Retrieval only traverses ABOUT from entities back to claims, so a
+            # compact index is sufficient for this backend.
             if edge.relation == "ABOUT" and edge.source_id.startswith("claim-"):
                 self.entity_claim_index[edge.target_id].append(edge.source_id)
 
     def get_chunks(self, chunk_ids: list[str]) -> list[ChunkRecord]:
+        """Return existing chunks in requested-ID order."""
+
         return [self.chunks[chunk_id] for chunk_id in chunk_ids if chunk_id in self.chunks]
 
     def search_entities(self, query: str, limit: int = 5) -> list[EntityRecord]:
+        """Find entities with case-insensitive canonical-name containment."""
+
         lowered = query.lower()
         matches = [
             entity
@@ -51,6 +75,8 @@ class InMemoryGraphStore:
         return matches[:limit]
 
     def claims_for_entities(self, entity_ids: list[str], limit: int = 10) -> list[ClaimRecord]:
+        """Expand entity IDs to unique ABOUT claims."""
+
         claim_ids: list[str] = []
         for entity_id in entity_ids:
             claim_ids.extend(self.entity_claim_index.get(entity_id, []))
@@ -58,4 +84,6 @@ class InMemoryGraphStore:
         return [self.claims[claim_id] for claim_id in unique_ids[:limit] if claim_id in self.claims]
 
     def close(self) -> None:
+        """Perform no work because there are no external resources."""
+
         return

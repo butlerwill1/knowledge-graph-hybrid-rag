@@ -1,3 +1,5 @@
+"""Persist and retrieve graph records through the Neo4j Python driver."""
+
 from __future__ import annotations
 
 from app.config import Settings
@@ -5,6 +7,8 @@ from app.models.schemas import ChunkRecord, ClaimRecord, DocumentRecord, EntityR
 
 
 class Neo4jGraphStore:
+    """Implement graph persistence and retrieval against a Neo4j DBMS."""
+
     _SCHEMA_STATEMENTS = (
         "CREATE CONSTRAINT document_id IF NOT EXISTS FOR (n:Document) REQUIRE n.id IS UNIQUE",
         "CREATE CONSTRAINT chunk_id IF NOT EXISTS FOR (n:Chunk) REQUIRE n.id IS UNIQUE",
@@ -13,6 +17,8 @@ class Neo4jGraphStore:
     )
 
     def __init__(self, settings: Settings) -> None:
+        """Open the Neo4j driver and ensure required ID constraints exist."""
+
         self.settings = settings
         try:
             from neo4j import GraphDatabase  # type: ignore
@@ -25,11 +31,15 @@ class Neo4jGraphStore:
         self.ensure_schema()
 
     def ensure_schema(self) -> None:
+        """Create idempotent uniqueness constraints for persisted node labels."""
+
         with self._driver.session() as session:
             for statement in self._SCHEMA_STATEMENTS:
                 session.run(statement).consume()
 
     def upsert_document(self, document: DocumentRecord) -> None:
+        """Merge one document node by generated ID."""
+
         payload = document.model_dump(mode="json")
         with self._driver.session() as session:
             session.run(
@@ -41,6 +51,8 @@ class Neo4jGraphStore:
             ).consume()
 
     def upsert_chunks(self, chunks: list[ChunkRecord]) -> None:
+        """Merge chunk nodes in one UNWIND operation."""
+
         rows = [chunk.model_dump(mode="json") for chunk in chunks]
         if not rows:
             return
@@ -55,6 +67,8 @@ class Neo4jGraphStore:
             ).consume()
 
     def upsert_entities(self, entities: list[EntityRecord]) -> None:
+        """Merge entity nodes in one UNWIND operation."""
+
         rows = [entity.model_dump(mode="json") for entity in entities]
         if not rows:
             return
@@ -69,6 +83,8 @@ class Neo4jGraphStore:
             ).consume()
 
     def upsert_claims(self, claims: list[ClaimRecord]) -> None:
+        """Merge claim nodes in one UNWIND operation."""
+
         rows = [claim.model_dump(mode="json") for claim in claims]
         if not rows:
             return
@@ -83,6 +99,8 @@ class Neo4jGraphStore:
             ).consume()
 
     def upsert_edges(self, edges: list[GraphEdge]) -> None:
+        """Merge relationships after grouping records by Cypher type."""
+
         if not edges:
             return
         # Cypher relationship types can't be parameterised, so group by relation type
@@ -95,6 +113,8 @@ class Neo4jGraphStore:
         with self._driver.session() as session:
             for rel_type, rows in by_type.items():
                 import re as _re
+                # The relationship type is the only interpolated part of this
+                # query, so normalise it to a restricted identifier alphabet.
                 safe_type = _re.sub(r"[^A-Z0-9_]", "_", rel_type.upper().replace(" ", "_").replace("-", "_"))
                 session.run(
                     f"""
@@ -108,6 +128,8 @@ class Neo4jGraphStore:
                 ).consume()
 
     def get_chunks(self, chunk_ids: list[str]) -> list[ChunkRecord]:
+        """Fetch requested chunk nodes and validate them as application records."""
+
         if not chunk_ids:
             return []
         with self._driver.session() as session:
@@ -122,6 +144,8 @@ class Neo4jGraphStore:
             return [ChunkRecord.model_validate(dict(record["c"])) for record in result]
 
     def search_entities(self, query: str, limit: int = 5) -> list[EntityRecord]:
+        """Search canonical names using case-insensitive substring containment."""
+
         lowered_query = query.lower()
         with self._driver.session() as session:
             result = session.run(
@@ -139,6 +163,8 @@ class Neo4jGraphStore:
             return [EntityRecord.model_validate(dict(record["e"])) for record in result]
 
     def claims_for_entities(self, entity_ids: list[str], limit: int = 10) -> list[ClaimRecord]:
+        """Return distinct claims connected to entities through ABOUT edges."""
+
         if not entity_ids:
             return []
         with self._driver.session() as session:
@@ -156,4 +182,6 @@ class Neo4jGraphStore:
             return [ClaimRecord.model_validate(dict(record["c"])) for record in result]
 
     def close(self) -> None:
+        """Close the shared Neo4j driver and its connection pool."""
+
         self._driver.close()
